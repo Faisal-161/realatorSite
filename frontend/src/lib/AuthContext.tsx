@@ -1,141 +1,137 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, UserRole } from './types';
-import { users } from './data';
+import { loginUser, registerUser, getCurrentUser } from '../api/auth'; // Adjusted path
+import { api } from '../api/axios'; // For setting auth header
 import { useToast } from "@/components/ui/use-toast";
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => void;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  register: (name: string, email: string, password: string, role: UserRole) => void;
-  loading: boolean;
+  register: (username: string, email: string, password: string, role: UserRole) => Promise<void>;
+  authLoading: boolean; // Renamed from loading
+  isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  useEffect(() => {
-    // Check if user is already logged in
-    const storedUser = localStorage.getItem('user');
-    
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+  const loadUserSession = useCallback(async () => {
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      try {
+        const currentUser = await getCurrentUser();
+        setUser(currentUser);
+      } catch (error) {
+        console.error("Session load failed, token might be invalid:", error);
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken'); // If using refresh tokens
+        delete api.defaults.headers.common['Authorization'];
+      }
     }
-    
-    setLoading(false);
+    setAuthLoading(false);
   }, []);
 
-  const login = (email: string, password: string) => {
-    // Simulate authentication
-    const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    
-    if (foundUser) {
-      setUser(foundUser);
-      localStorage.setItem('user', JSON.stringify(foundUser));
+  useEffect(() => {
+    loadUserSession();
+  }, [loadUserSession]);
+
+  const login = async (email: string, password: string) => {
+    try {
+      const data = await loginUser({ email, password });
+      localStorage.setItem('accessToken', data.access);
+      if (data.refresh) {
+        localStorage.setItem('refreshToken', data.refresh);
+      }
+      api.defaults.headers.common['Authorization'] = `Bearer ${data.access}`;
+      
+      // Fetch user details after successful token retrieval
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
       
       toast({
         title: "Login successful",
-        description: `Welcome back, ${foundUser.name}!`,
+        description: `Welcome back, ${currentUser.username}!`,
       });
-      
+
       // Redirect based on user role
-      switch (foundUser.role) {
-        case 'buyer':
-          navigate('/buyer');
-          break;
-        case 'seller':
-          navigate('/seller');
-          break;
-        case 'partner':
-          navigate('/partner');
-          break;
-        case 'admin':
-          navigate('/admin');
-          break;
-        default:
-          navigate('/');
+      switch (currentUser.role) {
+        case 'buyer': navigate('/buyer'); break;
+        case 'seller': navigate('/seller'); break;
+        case 'service_provider': navigate('/partner'); break; // Matched UserRole type
+        case 'admin': navigate('/admin'); break;
+        default: navigate('/');
       }
-    } else {
+    } catch (error: any) {
+      console.error("Login error:", error);
       toast({
         variant: "destructive",
         title: "Login failed",
-        description: "Invalid email or password. Please try again.",
+        description: error.response?.data?.detail || "Invalid credentials or server error.",
       });
+      throw error; // Re-throw to allow form to handle error state
     }
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('user');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    delete api.defaults.headers.common['Authorization'];
     toast({
       title: "Logged out",
       description: "You have been successfully logged out.",
     });
     navigate('/login');
+    // Consider calling backend logoutUser() if it exists and handles token blacklisting
   };
 
-  const register = (name: string, email: string, password: string, role: UserRole) => {
-    // Check if email is already used
-    const existingUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    
-    if (existingUser) {
+  const register = async (username: string, email: string, password: string, role: UserRole) => {
+    try {
+      // Assuming role is 'buyer' by default for new public registrations,
+      // or passed if admin is creating users. Adjust as needed.
+      const newUser = await registerUser({ username, email, password, role });
+      toast({
+        title: "Registration successful",
+        description: "Your account has been created. Please log in.",
+      });
+      // Option 1: Redirect to login
+      navigate('/login');
+      // Option 2: Attempt to auto-login (requires password handling or token from register endpoint)
+      // For simplicity, redirecting to login is often safer.
+      // If registerUser returned a token, you could use it here.
+      // Or, call login(email, password);
+    } catch (error: any) {
+      console.error("Registration error:", error);
+      const errorMessages = error.response?.data;
+      let description = "An error occurred during registration.";
+      if (errorMessages) {
+        // Concatenate multiple error messages if backend sends them (e.g. for username, email, password)
+        description = Object.entries(errorMessages).map(([key, value]) => 
+          `${key}: ${(Array.isArray(value) ? value.join(', ') : value)}`
+        ).join('; ');
+      }
       toast({
         variant: "destructive",
         title: "Registration failed",
-        description: "Email address is already in use.",
+        description: description,
       });
-      return;
-    }
-    
-    // Create new user (in a real app, this would be an API call)
-    const newUser: User = {
-      id: `user-${users.length + 1}`,
-      name,
-      email,
-      role,
-      createdAt: new Date(),
-    };
-    
-    // Add user to the array (this would be a database insertion in a real app)
-    users.push(newUser);
-    
-    // Set the current user and store in localStorage
-    setUser(newUser);
-    localStorage.setItem('user', JSON.stringify(newUser));
-    
-    toast({
-      title: "Registration successful",
-      description: "Your account has been created successfully!",
-    });
-    
-    // Redirect based on user role
-    switch (newUser.role) {
-      case 'buyer':
-        navigate('/buyer');
-        break;
-      case 'seller':
-        navigate('/seller');
-        break;
-      case 'partner':
-        navigate('/partner');
-        break;
-      case 'admin':
-        navigate('/admin');
-        break;
-      default:
-        navigate('/');
+      throw error; // Re-throw for form error handling
     }
   };
+  
+  const isAuthenticated = !!user;
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, register, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, register, authLoading, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );

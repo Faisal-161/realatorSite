@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { Building } from "lucide-react";
 
 export function SiteHeader() {
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated, authLoading } = useAuth(); // Added isAuthenticated, authLoading
   const location = useLocation();
   
   // Don't show header on auth pages
@@ -60,12 +60,14 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
-          {user ? (
+          {authLoading ? (
+            <div className="text-sm text-muted-foreground">Loading...</div>
+          ) : isAuthenticated && user ? (
             <div className="flex items-center gap-4">
               <div className="hidden md:block text-sm text-muted-foreground">
-                Welcome, {user.name}
+                Welcome, {user.username} {/* Changed user.name to user.username */}
               </div>
-              <Link to={`/${user.role}`}>
+              <Link to={user.role === 'service_provider' ? '/partner' : `/${user.role}`}> {/* Map role to path */}
                 <Button variant="outline" size="sm">Dashboard</Button>
               </Link>
               <Button variant="ghost" size="sm" onClick={logout}>

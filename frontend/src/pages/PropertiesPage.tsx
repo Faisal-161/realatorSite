@@ -1,8 +1,10 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { PropertyCard } from "@/components/properties/PropertyCard";
-import { properties } from "@/lib/data";
+import { getListings } from "@/api/listings";
+import type { PropertyListing } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -69,29 +71,40 @@ const PropertiesPage = () => {
     setActiveFilters([]);
   };
 
-  // Filter properties based on search criteria
-  const filteredProperties = properties.filter((property) => {
-    const matchesSearch =
-      property.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.description.toLowerCase().includes(searchTerm.toLowerCase());
-      
-    const matchesPrice = 
-      property.price >= priceRange[0] && property.price <= priceRange[1];
-      
-    const matchesBedrooms = 
-      !bedrooms || property.bedrooms === parseInt(bedrooms);
-      
-    return matchesSearch && matchesPrice && matchesBedrooms;
+  const { data: allProperties, isLoading, isError, error } = useQuery<PropertyListing[], Error>({
+    queryKey: ['listings'],
+    queryFn: getListings,
   });
 
+  // Filter properties based on search criteria
+  const filteredProperties = useMemo(() => {
+    if (!allProperties) return [];
+    return allProperties.filter((property) => {
+      const matchesSearch =
+        property.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        property.address.toLowerCase().includes(searchTerm.toLowerCase()) || // Changed location to address
+        property.description.toLowerCase().includes(searchTerm.toLowerCase());
+        
+      const propertyPrice = parseFloat(property.price); // Parse price string
+      const matchesPrice = 
+        propertyPrice >= priceRange[0] && propertyPrice <= priceRange[1];
+        
+      const matchesBedrooms = 
+        !bedrooms || property.num_bedrooms === parseInt(bedrooms); // Changed bedrooms to num_bedrooms
+        
+      return matchesSearch && matchesPrice && matchesBedrooms;
+    });
+  }, [allProperties, searchTerm, priceRange, bedrooms]);
+
   // Sort properties
-  const sortedProperties = [...filteredProperties].sort((a, b) => {
-    if (sortBy === "price-asc") return a.price - b.price;
-    if (sortBy === "price-desc") return b.price - a.price;
-    if (sortBy === "latest") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    return 0;
-  });
+  const sortedProperties = useMemo(() => {
+    return [...filteredProperties].sort((a, b) => {
+      if (sortBy === "price-asc") return parseFloat(a.price) - parseFloat(b.price); // Parse price
+      if (sortBy === "price-desc") return parseFloat(b.price) - parseFloat(a.price); // Parse price
+      if (sortBy === "latest") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); // Changed createdAt
+      return 0;
+    });
+  }, [filteredProperties, sortBy]);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -375,7 +388,17 @@ const PropertiesPage = () => {
             )}
 
             <AnimatePresence mode="wait">
-              {sortedProperties.length > 0 ? (
+              {isLoading && (
+                <motion.div key="loading" className="col-span-full text-center p-8">
+                  <p>Loading properties...</p> {/* Replace with spinner/skeleton later */}
+                </motion.div>
+              )}
+              {isError && (
+                <motion.div key="error" className="col-span-full text-center p-8 text-red-500">
+                  <p>Error fetching properties: {error?.message}</p>
+                </motion.div>
+              )}
+              {!isLoading && !isError && sortedProperties.length > 0 && (
                 <motion.div 
                   className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                   variants={containerVariants}
@@ -389,7 +412,8 @@ const PropertiesPage = () => {
                     </motion.div>
                   ))}
                 </motion.div>
-              ) : (
+              )}
+              {!isLoading && !isError && sortedProperties.length === 0 && (
                 <motion.div 
                   className="p-8 text-center border rounded-lg bg-white"
                   initial={{ opacity: 0 }}

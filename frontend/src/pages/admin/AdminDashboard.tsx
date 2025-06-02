@@ -1,16 +1,20 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Link } from "react-router-dom";
-import { users, properties, serviceOffers, contactRequests, aiContents, stats } from "@/lib/data";
+import { getUsers } from "@/api/users";
+import { getListings } from "@/api/listings";
+import { getServices } from "@/api/services";
+import type { User, PropertyListing, ServiceOffer } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { 
-  User, Users, Building, List, Sparkles, MessageSquare, CreditCard, 
+  User as UserIcon, Users, Building, List, Sparkles, MessageSquare, CreditCard, 
   ArrowUp, ArrowDown, BarChart2, PieChart as PieChartIcon, TrendingUp,
-  LineChart as LineChartIcon
-} from "lucide-react";
+  LineChart as LineChartIcon, Loader2
+} from "lucide-react"; // Aliased User import
 import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
@@ -25,63 +29,97 @@ import { CrmPanel } from "@/components/crm/CrmPanel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const AdminDashboard = () => {
-  const [timeRange, setTimeRange] = useState("monthly");
+  const [timeRange, setTimeRange] = useState("monthly"); // For mock analytics
   const [activeTab, setActiveTab] = useState("overview");
+
+  const { data: usersData, isLoading: isLoadingUsers } = useQuery<User[], Error>({
+    queryKey: ['usersAdmin'],
+    queryFn: getUsers,
+  });
+  const { data: propertiesData, isLoading: isLoadingProperties } = useQuery<PropertyListing[], Error>({
+    queryKey: ['listingsAdmin'],
+    queryFn: getListings,
+  });
+  const { data: servicesData, isLoading: isLoadingServices } = useQuery<ServiceOffer[], Error>({
+    queryKey: ['servicesAdmin'],
+    queryFn: getServices,
+  });
+
+  // Memoized calculations for derived data
+  const latestUsers = useMemo(() => {
+    if (!usersData) return [];
+    // Sort by ID descending as a proxy for "latest" since createdAt is not in User model
+    return [...usersData].sort((a, b) => b.id - a.id).slice(0, 5);
+  }, [usersData]);
+
+  const latestProperties = useMemo(() => {
+    if (!propertiesData) return [];
+    return [...propertiesData].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 3);
+  }, [propertiesData]);
+
+  const latestServiceOffers = useMemo(() => {
+    if (!servicesData) return [];
+    return [...servicesData].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 3);
+  }, [servicesData]);
   
-  // Get latest users, properties and service offers
-  const latestUsers = [...users].sort((a, b) => 
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  ).slice(0, 5);
+  const totalPropertyValue = useMemo(() => {
+    if (!propertiesData) return 0;
+    return propertiesData.reduce((sum, property) => sum + parseFloat(property.price), 0);
+  }, [propertiesData]);
 
-  const latestProperties = [...properties].sort((a, b) => 
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  ).slice(0, 3);
+  // AI Usage and Contact Requests related mock data removed or will be marked as mock
+  const aiContents: any[] = []; // Mock data for sections not being updated
+  const contactRequests: any[] = []; // Mock data
+  const stats: any = { usersByRole: { buyer: 0, seller: 0, partner: 0, admin: 0 }}; // Mock stats
 
-  const latestServiceOffers = [...serviceOffers].sort((a, b) => 
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  ).slice(0, 3);
+  const aiUsageByUser = useMemo(() => { // Still uses mock aiContents
+    if (!usersData || aiContents.length === 0) return [];
+    return usersData
+      .map(user => {
+        const userAiContents = aiContents.filter(content => content.userId === user.id);
+        return {
+          user, // This should be user.username or similar from your actual User type for display
+          name: user.username, // Assuming username for display
+          role: user.role, // Assuming role for display
+          createdAt: 'N/A', // Mock or remove if not available
+          count: userAiContents.length,
+          lastUsed: userAiContents.length > 0 
+            ? new Date(Math.max(...userAiContents.map(c => new Date(c.createdAt).getTime())))
+            : null
+        };
+      })
+      .filter(item => item.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [usersData]);
 
-  // Get AI usage by user
-  const aiUsageByUser = users
-    .map(user => {
-      const userAiContents = aiContents.filter(content => content.userId === user.id);
-      return {
-        user,
-        count: userAiContents.length,
-        lastUsed: userAiContents.length > 0 
-          ? new Date(Math.max(...userAiContents.map(c => new Date(c.createdAt).getTime())))
-          : null
-      };
-    })
-    .filter(item => item.count > 0)
-    .sort((a, b) => b.count - a.count);
 
-  // Calculate simple analytics
-  const totalPropertyValue = properties.reduce((sum, property) => sum + property.price, 0);
-
-  // Enhanced Analytics Data
-  const totalSales = 28;
+  // Enhanced Analytics Data (remains mock)
+  const totalSales = 28; 
   const totalProfit = 12500000;
   const avgDealSize = totalProfit / totalSales;
   const conversionRate = 16.5;
 
   // Chart data for user roles
-  const userRolesChartData = createChartData(
-    ['Buyers', 'Sellers', 'Partners', 'Admins'],
-    [{
-      label: 'User Count',
-      data: [
-        stats.usersByRole.buyer, 
-        stats.usersByRole.seller, 
-        stats.usersByRole.partner, 
-        stats.usersByRole.admin
-      ],
-      backgroundColor: chartColors.palette,
-    }]
-  );
+  const userRolesChartData = useMemo(() => {
+    if (!usersData) { // Fallback if usersData is not loaded
+      return createChartData(['Buyers', 'Sellers', 'Partners', 'Admins'], [{ label: 'User Count', data: [0,0,0,0], backgroundColor: chartColors.palette }]);
+    }
+    const rolesCount = usersData.reduce((acc, user) => {
+      acc[user.role] = (acc[user.role] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const labels = ['buyer', 'seller', 'service_provider', 'admin']; // Match UserRole type
+    const data = labels.map(role => rolesCount[role] || 0);
 
-  // Chart data for property types
-  const propertyTypesChartData = createChartData(
+    return createChartData(
+      labels.map(l => l.charAt(0).toUpperCase() + l.slice(1).replace('_', ' ')), // Prettify labels
+      [{ label: 'User Count', data, backgroundColor: chartColors.palette }]
+    );
+  }, [usersData]);
+
+  // Chart data for property types (remains mock - as property type is not in model)
+  const propertyTypesChartData = createChartData( 
     ['House', 'Apartment', 'Condo', 'Land', 'Commercial'],
     [{
       label: 'Property Count',
@@ -213,7 +251,7 @@ const AdminDashboard = () => {
                       <CardDescription>Platform users</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-3xl font-bold text-estate-600">{users.length}</div>
+                      {isLoadingUsers ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-3xl font-bold text-estate-600">{usersData?.length || 0}</div>}
                       <p className="text-sm text-muted-foreground flex items-center mt-1">
                         <ArrowUp className="h-4 w-4 mr-1 text-green-600" />
                         <span className="text-green-600 font-medium">12%</span> from last month
@@ -232,7 +270,7 @@ const AdminDashboard = () => {
                       <CardDescription>Listed on platform</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-3xl font-bold text-estate-600">{properties.length}</div>
+                      {isLoadingProperties ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-3xl font-bold text-estate-600">{propertiesData?.length || 0}</div>}
                       <p className="text-sm text-muted-foreground flex items-center mt-1">
                         <ArrowUp className="h-4 w-4 mr-1 text-green-600" />
                         <span className="text-green-600 font-medium">8%</span> from last month
@@ -251,7 +289,7 @@ const AdminDashboard = () => {
                       <CardDescription>Partner offerings</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-3xl font-bold text-estate-600">{serviceOffers.length}</div>
+                      {isLoadingServices ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-3xl font-bold text-estate-600">{servicesData?.length || 0}</div>}
                       <p className="text-sm text-muted-foreground flex items-center mt-1">
                         <ArrowUp className="h-4 w-4 mr-1 text-green-600" />
                         <span className="text-green-600 font-medium">15%</span> from last month
@@ -270,7 +308,7 @@ const AdminDashboard = () => {
                       <CardDescription>Total listed value</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-3xl font-bold text-estate-600">{formatCurrency(totalPropertyValue)}</div>
+                      {isLoadingProperties ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-3xl font-bold text-estate-600">{formatCurrency(totalPropertyValue)}</div>}
                       <p className="text-sm text-muted-foreground flex items-center mt-1">
                         <ArrowDown className="h-4 w-4 mr-1 text-amber-600" />
                         <span className="text-amber-600 font-medium">3%</span> from last month
@@ -291,7 +329,7 @@ const AdminDashboard = () => {
                       <CardDescription>Breakdown by role type</CardDescription>
                     </CardHeader>
                     <CardContent className="h-80">
-                      <BarChart data={userRolesChartData} />
+                      {isLoadingUsers ? <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-estate-600" /></div> : <BarChart data={userRolesChartData} />}
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -322,16 +360,16 @@ const AdminDashboard = () => {
                           >
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                                <User className="h-5 w-5 text-muted-foreground" />
+                                <UserIcon className="h-5 w-5 text-muted-foreground" />
                               </div>
                               <div>
-                                <p className="font-medium">{user.name}</p>
+                                <p className="font-medium">{user.username}</p> {/* Changed to username */}
                                 <p className="text-sm text-muted-foreground">{user.email}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-4">
-                              <Badge className="capitalize">{user.role}</Badge>
-                              <div className="text-sm text-muted-foreground">{formatDate(user.createdAt)}</div>
+                              <Badge className="capitalize">{user.role.replace('_', ' ')}</Badge>
+                              {/* formatDate(user.createdAt) removed as createdAt is not in User model */}
                             </div>
                           </motion.div>
                         ))}
@@ -370,20 +408,24 @@ const AdminDashboard = () => {
                             whileHover={{ scale: 1.01, backgroundColor: "rgba(0,0,0,0.01)" }}
                           >
                             <div className="w-16 h-16 rounded overflow-hidden flex-shrink-0">
-                              <img 
-                                src={property.images[0]} 
-                                alt={property.title}
-                                className="w-full h-full object-cover" 
-                              />
+                                {property.image ? (
+                                  <img 
+                                    src={property.image} 
+                                    alt={property.title}
+                                    className="w-full h-full object-cover" 
+                                  />
+                                ) : (
+                                  <div className="w-full h-full bg-muted flex items-center justify-center text-xs text-muted-foreground">No Image</div>
+                                )}
                             </div>
                             <div className="flex-1">
                               <div className="flex justify-between">
                                 <p className="font-medium">{property.title}</p>
-                                <p className="font-bold text-estate-600">{formatCurrency(property.price)}</p>
+                                  <p className="font-bold text-estate-600">{formatCurrency(parseFloat(property.price))}</p>
                               </div>
-                              <p className="text-xs text-muted-foreground">{property.location}</p>
+                                <p className="text-xs text-muted-foreground">{property.address}</p> {/* Changed to address */}
                               <p className="text-xs text-muted-foreground mt-1">
-                                Added on {formatDate(property.createdAt)}
+                                  Added on {formatDate(property.created_at)} {/* Changed to created_at */}
                               </p>
                             </div>
                           </motion.div>
@@ -423,12 +465,12 @@ const AdminDashboard = () => {
                             <div className="flex-1">
                               <div className="flex justify-between">
                                 <p className="font-medium">{service.title}</p>
-                                <p className="font-bold text-estate-600">{formatCurrency(service.price)}</p>
+                                {/* formatCurrency(service.price) removed */}
                               </div>
-                              <p className="text-xs text-muted-foreground">By {service.partnerName}</p>
+                              <p className="text-xs text-muted-foreground">By {service.service_provider.username}</p> {/* Changed to service_provider.username */}
                               <p className="text-xs text-muted-foreground mt-1">
-                                <Badge variant="outline" className="text-xs capitalize mr-2">{service.category}</Badge>
-                                Added on {formatDate(service.createdAt)}
+                                {/* Badge for category removed */}
+                                Added on {formatDate(service.created_at)} {/* Changed to created_at */}
                               </p>
                             </div>
                           </motion.div>
