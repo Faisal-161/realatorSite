@@ -1,51 +1,88 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Link } from "react-router-dom";
-import { properties, contactRequests, aiContents } from "@/lib/data";
+import { getListings } from "@/api/listings";
+import type { PropertyListing } from "@/lib/types";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatCurrency } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
+// import { Badge } from "@/components/ui/badge"; // Badge might not be needed if inquiries are simplified
 import { Button } from "@/components/ui/button";
-import { PropertyCard } from "@/components/properties/PropertyCard";
-import { Building, MessageSquare, Sparkles, Plus, TrendingUp, Users, BarChart2, LineChart } from "lucide-react";
+import { PropertyCard } from "@/components/properties/PropertyCard"; // Consider if PropertyCard needs Edit/Delete buttons or if they are separate
+import { Building, MessageSquare, Sparkles, Plus, TrendingUp, Users, BarChart2, LineChart, Loader2, Edit, Trash2 } from "lucide-react"; // Added Edit, Trash2
 import { motion } from "framer-motion";
+import { useMutation, useQueryClient } from "@tanstack/react-query"; // For delete mutation
+import { deleteProperty } from "@/api/listings"; // For deleteProperty
+import { useToast } from "@/components/ui/use-toast"; // For toasts
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, PieChart, chartColors, createChartData } from "@/components/ui/chart-components";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const SellerDashboard = () => {
-  // Filter properties to only show those owned by the current user (user-3)
-  const myProperties = properties.filter(property => property.sellerId === "user-3");
+  const { user } = useAuth(); 
+  const { toast } = useToast(); 
+  const queryClient = useQueryClient(); 
+
+  const { data: allProperties, isLoading: isLoadingProperties, isError: isErrorProperties, error: propertiesError } = useQuery<PropertyListing[], Error>({
+    queryKey: ['allListingsForSellerDashboard'], 
+    queryFn: getListings,
+  });
+
+  const myProperties = useMemo(() => {
+    if (!allProperties || !user) return [];
+    return allProperties.filter(property => property.seller.id === user.id);
+  }, [allProperties, user]);
+
+  // Placeholder for inquiries - will be removed or refactored if API becomes available
+  const myRequests: any[] = []; // Empty array for now
+
+  // Placeholder for AI content - will be removed
+  const myAiContent: any[] = []; // Empty array for now
   
-  // Filter contact requests for my properties
-  const myRequests = contactRequests.filter(request => 
-    myProperties.some(property => property.id === request.propertyId)
-  );
-
-  // Filter AI content to only show those created by the current user
-  const myAiContent = aiContents.filter(content => 
-    content.userId === "user-3" && content.contentType === "marketing"
-  );
-
-  // Analytics data (mocked for demo)
+  // Analytics data (mocked for demo - keeping this part as is for now)
   const [timeRange, setTimeRange] = useState("monthly");
-  const totalSales = 4;
-  const totalProfit = 1250000;
-  const totalLeads = myRequests.length + 12; // Adding some mock data
-  const avgDealSize = totalProfit / totalSales;
-  const conversionRate = (totalSales / totalLeads) * 100;
+  const totalSales = 4; // Mock
+  const totalProfit = 1250000; // Mock
+  const totalLeads = 12; // Mock, was myRequests.length + 12
+  const avgDealSize = totalSales > 0 ? totalProfit / totalSales : 0; // Mock
+  const conversionRate = totalLeads > 0 ? (totalSales / totalLeads) * 100 : 0; // Mock
   
-  // Chart data for property types
-  const propertyTypesData = createChartData(
-    ["House", "Apartment", "Condo", "Land", "Commercial"],
-    [
-      {
-        label: "Listed Properties by Type",
-        data: [3, 2, 1, 1, 0],
-        backgroundColor: chartColors.palette,
-      },
-    ]
-  );
+  // Chart data for property types (using myProperties if available, else mock)
+  const propertyTypesData = useMemo(() => {
+    if (myProperties.length > 0) {
+      // This is a simplified example. Real aggregation would be more complex.
+      // For now, let's assume fixed categories for demo if no properties.
+      const typesCount = myProperties.reduce((acc, property) => {
+        // Assuming type can be inferred or is a field (not in current model)
+        const type = property.title.includes("House") ? "House" : 
+                     property.title.includes("Apartment") ? "Apartment" : "Other";
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      return createChartData(
+        Object.keys(typesCount),
+        [{ label: "Listed Properties by Type", data: Object.values(typesCount), backgroundColor: chartColors.palette }]
+      );
+    }
+    // Fallback mock data if no properties
+    return createChartData(
+      ["House", "Apartment", "Condo", "Land", "Commercial"],
+      [{ label: "Listed Properties by Type", data: [0,0,0,0,0], backgroundColor: chartColors.palette }]
+    );
+  }, [myProperties]);
+  
+  // Chart data for monthly performance (remains mock, removed duplicate)
+  // const monthlyPerformanceData = createChartData(
+  //   ["House", "Apartment", "Condo", "Land", "Commercial"],
+  //   [
+  //     {
+  //       label: "Listed Properties by Type",
+  //       data: [3, 2, 1, 1, 0],
+  //       backgroundColor: chartColors.palette,
+  //     },
+  //   ]
+  // );
 
   // Chart data for monthly performance
   const monthlyPerformanceData = createChartData(
@@ -87,6 +124,27 @@ const SellerDashboard = () => {
     }
   };
 
+  const deleteMutation = useMutation(deleteProperty, {
+    onSuccess: () => {
+      toast({ title: 'Property Deleted', description: 'The property has been successfully deleted.' });
+      queryClient.invalidateQueries(['allListingsForSellerDashboard']);
+      queryClient.invalidateQueries(['listings']); // Invalidate public listings too
+    },
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to Delete Property',
+        description: error.message || 'An unexpected error occurred.',
+      });
+    },
+  });
+
+  const handleDeleteProperty = (propertyId: number) => {
+    if (window.confirm('Are you sure you want to delete this property?')) {
+      deleteMutation.mutate(propertyId);
+    }
+  };
+
   return (
     <DashboardLayout requiredRole="seller">
       <motion.div 
@@ -116,7 +174,7 @@ const SellerDashboard = () => {
                 <CardDescription>Total active listings</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-estate-600">{myProperties.length}</div>
+                {isLoadingProperties ? <Loader2 className="h-6 w-6 animate-spin" /> : <div className="text-3xl font-bold text-estate-600">{myProperties.length}</div>}
                 <div className="text-sm text-muted-foreground mt-1">
                   <span className="inline-flex items-center text-green-600">
                     <TrendingUp className="h-3 w-3 mr-1" />
@@ -136,7 +194,8 @@ const SellerDashboard = () => {
                 <CardDescription>Contact requests</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-estate-600">{myRequests.length}</div>
+                {/* Inquiries data removed for now */}
+                <div className="text-3xl font-bold text-estate-600">N/A</div>
                 <div className="text-sm text-muted-foreground mt-1">
                   <span className="inline-flex items-center text-green-600">
                     <TrendingUp className="h-3 w-3 mr-1" />
@@ -265,52 +324,77 @@ const SellerDashboard = () => {
                   <div className="flex items-center justify-between">
                     <CardTitle>My Properties</CardTitle>
                     <div className="flex gap-2">
-                      <Link to="/seller/add-property">
+                      <Link to="/seller/property/new"> {/* Updated link */}
                         <Button size="sm">
                           <Plus className="w-4 h-4 mr-2" />
                           Add Property
                         </Button>
                       </Link>
-                      <Link to="/seller/properties">
-                        <Button variant="outline" size="sm">View All</Button>
-                      </Link>
+                      {/* Link to a page showing all seller's properties might be good */}
+                      {/* <Link to="/seller/properties/all"><Button variant="outline" size="sm">View All</Button></Link> */}
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {myProperties.length > 0 ? (
-                    <motion.div 
-                      className="grid grid-cols-1 md:grid-cols-2 gap-4"
-                      variants={containerVariants}
-                      initial="hidden"
-                      animate="visible"
-                    >
-                      {myProperties.slice(0, 4).map(property => (
-                        <motion.div 
-                          key={property.id}
-                          variants={itemVariants}
-                          whileHover={{ scale: 1.02 }}
-                          className="transition-all"
-                        >
-                          <PropertyCard key={property.id} property={property} />
-                        </motion.div>
+                  {isLoadingProperties && <div className="flex justify-center py-6"><Loader2 className="h-8 w-8 animate-spin text-estate-600" /></div>}
+                  {isErrorProperties && <p className="text-red-500 text-center py-6">Error loading properties: {propertiesError?.message}</p>}
+                  {!isLoadingProperties && !isErrorProperties && myProperties.length > 0 ? (
+                    <div className="space-y-4">
+                      {myProperties.map(property => ( 
+                        <Card key={property.id} className="flex flex-col sm:flex-row">
+                          <div className="flex-shrink-0 sm:w-1/3">
+                            <img 
+                              src={property.image || '/placeholder-image.jpg'} // Placeholder if no image
+                              alt={property.title} 
+                              className="h-48 w-full object-cover sm:h-full rounded-t-lg sm:rounded-l-lg sm:rounded-t-none"
+                            />
+                          </div>
+                          <div className="p-4 flex flex-col justify-between flex-grow">
+                            <div>
+                              <h3 className="text-lg font-semibold hover:text-estate-600">
+                                <Link to={`/properties/${property.id}`}>{property.title}</Link>
+                              </h3>
+                              <p className="text-sm text-muted-foreground truncate">{property.address}</p>
+                              <p className="text-lg font-semibold text-estate-700 mt-1">{formatCurrency(parseFloat(property.price))}</p>
+                            </div>
+                            <div className="flex gap-2 mt-3 justify-end">
+                              <Link to={`/seller/property/${property.id}/edit`}>
+                                <Button variant="outline" size="sm" className="flex items-center">
+                                  <Edit className="h-4 w-4 mr-1" /> Edit
+                                </Button>
+                              </Link>
+                              <Button 
+                                variant="destructive" 
+                                size="sm" 
+                                className="flex items-center"
+                                onClick={() => handleDeleteProperty(property.id)}
+                                disabled={deleteMutation.isLoading && deleteMutation.variables === property.id}
+                              >
+                                {deleteMutation.isLoading && deleteMutation.variables === property.id ? 
+                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />
+                                }
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        </Card>
                       ))}
-                    </motion.div>
-                  ) : (
+                    </div>
+                  ) : (!isLoadingProperties && !isErrorProperties && ( 
                     <div className="text-center py-6">
                       <Building className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                       <h3 className="font-medium mb-1">No properties yet</h3>
                       <p className="text-sm text-muted-foreground mb-4">
                         Add your first property listing to get started.
                       </p>
-                      <Link to="/seller/add-property">
+                      <Link to="/seller/property/new"> {/* Updated link */}
                         <Button>
                           <Plus className="w-4 h-4 mr-2" />
                           Add Property
                         </Button>
                       </Link>
                     </div>
-                  )}
+                  ))}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -320,55 +404,15 @@ const SellerDashboard = () => {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle>Recent Inquiries</CardTitle>
-                    <Link to="/seller/requests">
-                      <Button variant="outline" size="sm">View All</Button>
-                    </Link>
+                    {/* Link to all inquiries page if available */}
+                    {/* <Link to="/seller/requests"><Button variant="outline" size="sm">View All</Button></Link> */}
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {myRequests.length > 0 ? (
-                    <motion.div 
-                      className="space-y-4"
-                      variants={containerVariants}
-                      initial="hidden"
-                      animate="visible"
-                    >
-                      {myRequests.slice(0, 5).map(request => {
-                        const property = properties.find(p => p.id === request.propertyId);
-                        return (
-                          <motion.div 
-                            key={request.id} 
-                            variants={itemVariants}
-                            whileHover={{ scale: 1.01, backgroundColor: "rgba(0,0,0,0.01)" }}
-                            className="flex items-start gap-3 p-3 border rounded-lg transition-all"
-                          >
-                            <div className="w-10 h-10 bg-estate-100 rounded-md flex items-center justify-center flex-shrink-0">
-                              <MessageSquare className="h-5 w-5 text-estate-600" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <p className="font-medium text-sm">From: {request.buyerName}</p>
-                                <Badge variant={
-                                  request.status === "pending" ? "default" : 
-                                  request.status === "contacted" ? "secondary" : "outline"
-                                }>
-                                  {request.status}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground">
-                                Re: {property?.title || "Unknown Property"}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">{formatDate(request.createdAt)}</p>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </motion.div>
-                  ) : (
-                    <div className="text-center py-4">
-                      <p className="text-sm text-muted-foreground">No inquiries yet.</p>
-                    </div>
-                  )}
+                  {/* Inquiries data removed for now */}
+                  <div className="text-center py-4">
+                    <p className="text-sm text-muted-foreground">Inquiries feature under development.</p>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -378,42 +422,15 @@ const SellerDashboard = () => {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle>Marketing Content</CardTitle>
-                    <Link to="/seller/marketing">
-                      <Button variant="outline" size="sm">Create More</Button>
-                    </Link>
+                    {/* Link to marketing content creation if available */}
+                    {/* <Link to="/seller/marketing"><Button variant="outline" size="sm">Create More</Button></Link> */}
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {myAiContent.length > 0 ? (
-                    <motion.div 
-                      className="space-y-4"
-                      variants={containerVariants}
-                      initial="hidden"
-                      animate="visible"
-                    >
-                      {myAiContent.slice(0, 3).map(content => (
-                        <motion.div 
-                          key={content.id} 
-                          variants={itemVariants}
-                          whileHover={{ scale: 1.01, backgroundColor: "rgba(0,0,0,0.01)" }}
-                          className="p-3 border rounded-lg transition-all"
-                        >
-                          <div className="flex items-center gap-2 mb-2">
-                            <Sparkles className="h-4 w-4 text-estate-600" />
-                            <span className="text-sm font-medium">AI Generated</span>
-                            <span className="text-xs text-muted-foreground ml-auto">
-                              {formatDate(content.createdAt)}
-                            </span>
-                          </div>
-                          <p className="text-sm">{content.content.substring(0, 100)}...</p>
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  ) : (
-                    <div className="text-center py-4">
-                      <p className="text-sm text-muted-foreground">No marketing content yet.</p>
-                    </div>
-                  )}
+                  {/* AI Marketing content removed for now */}
+                  <div className="text-center py-4">
+                    <p className="text-sm text-muted-foreground">Marketing content feature under development.</p>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

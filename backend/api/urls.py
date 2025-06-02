@@ -1,16 +1,21 @@
 
 from django.urls import path, include
-urlpatterns = [
-    path('', include('rest_framework.urls')),
-]
+from rest_framework.routers import DefaultRouter
+from .views.listings_view import PropertyListingViewSet
+from .views.bookings_view import BookingViewSet
+from .views.services_view import ServiceOfferViewSet
+from .views.user_view import UserViewSet
 
-from .views.listings_view import ListingsView
-from .views.bookings_view import BookingsView
-from .views.services_view import ServicesView
-from .views.user_view import UsersView
-urlpatterns += [
-    path('listings/', ListingsView.as_view(), name='listings'),
-    path('bookings/', BookingsView.as_view(), name='bookings'),
-    path('services/', ServicesView.as_view(), name='services'),
-    path('users/', UsersView.as_view(), name='users'),
+# Create a router and register our viewsets with it.
+router = DefaultRouter()
+router.register(r'listings', PropertyListingViewSet, basename='propertylisting')
+router.register(r'bookings', BookingViewSet, basename='booking')
+router.register(r'services', ServiceOfferViewSet, basename='serviceoffer')
+router.register(r'users', UserViewSet, basename='user')
+
+# The API URLs are now determined automatically by the router.
+# Additionally, we include the login URLs for the browsable API.
+urlpatterns = [
+    path('', include(router.urls)),
+    path('api-auth/', include('rest_framework.urls', namespace='rest_framework')) # For browsable API
 ]

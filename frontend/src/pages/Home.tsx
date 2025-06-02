@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { properties } from "@/lib/data";
+import { getListings } from "@/api/listings"; // Import API function
+import type { PropertyListing } from "@/lib/types"; // Import type
 import { PropertyCard } from "@/components/properties/PropertyCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,14 +18,25 @@ const Home = () => {
   const [showChatbot, setShowChatbot] = useState(false);
   const { scrollY } = useScroll();
   
+  // Fetch listings
+  const { data: allProperties, isLoading, isError, error } = useQuery<PropertyListing[], Error>({
+    queryKey: ['listings'],
+    queryFn: getListings,
+  });
+
   // Parallax effect
   const backgroundY = useTransform(scrollY, [0, 500], ['0%', '20%']);
   const opacityHero = useTransform(scrollY, [0, 300, 500], [1, 0.5, 0]);
   const scale = useTransform(scrollY, [0, 300], [1, 1.1]);
   
-  // Featured properties - just get the first 6
-  const featuredProperties = properties.slice(0, 6);
-  const [displayProperties, setDisplayProperties] = useState(featuredProperties.slice(0, 3));
+  // Featured properties - get the first 6 from fetched data
+  const featuredProperties = React.useMemo(() => allProperties?.slice(0, 6) || [], [allProperties]);
+  const [displayProperties, setDisplayProperties] = useState<PropertyListing[]>([]);
+
+  useEffect(() => {
+    // Initially display 3 properties, or fewer if not enough are featured
+    setDisplayProperties(featuredProperties.slice(0, 3));
+  }, [featuredProperties]);
   
   // Stats data
   const stats = [
@@ -335,7 +348,12 @@ const Home = () => {
             whileInView="visible"
             viewport={{ once: true }}
           >
-            {displayProperties.map((property, index) => (
+            {isLoading && <p className="col-span-full text-center">Loading featured properties...</p>}
+            {isError && <p className="col-span-full text-center text-red-500">Error fetching properties: {error?.message}</p>}
+            {!isLoading && !isError && displayProperties.length === 0 && (
+              <p className="col-span-full text-center">No featured properties available at the moment.</p>
+            )}
+            {!isLoading && !isError && displayProperties.map((property, index) => (
               <motion.div 
                 key={property.id} 
                 variants={itemVariants} 
@@ -347,7 +365,7 @@ const Home = () => {
             ))}
           </motion.div>
           
-          {displayProperties.length < featuredProperties.length && (
+          {!isLoading && !isError && displayProperties.length > 0 && displayProperties.length < featuredProperties.length && (
             <div className="text-center mt-8">
               <Button onClick={handleShowMore} variant="outline" size="lg">
                 Show More Properties

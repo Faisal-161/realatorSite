@@ -1,7 +1,9 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { serviceOffers } from "@/lib/data";
+import { getServices } from "@/api/services";
+import type { ServiceOffer } from "@/lib/types";
 import { ServiceCard } from "@/components/services/ServiceCard";
 import { Input } from "@/components/ui/input";
 import { Search, Filter } from "lucide-react";
@@ -13,47 +15,49 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const ServicesPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState("latest");
+  // const [categoryFilter, setCategoryFilter] = useState<string>("all"); // Category filter removed
+  const [sortBy, setSortBy] = useState("latest"); // Default sort
   const [isMobile, setIsMobile] = useState(false);
+
+  const { data: allServices, isLoading, isError, error } = useQuery<ServiceOffer[], Error>({
+    queryKey: ['services'],
+    queryFn: getServices,
+  });
 
   useEffect(() => {
     const checkScreenSize = () => {
       setIsMobile(window.innerWidth < 768);
     };
-    
-    // Initial check
     checkScreenSize();
-    
-    // Listen for resize events
     window.addEventListener('resize', checkScreenSize);
-    
-    // Cleanup
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  // Filter services based on search term and category
-  const filteredServices = serviceOffers.filter((service) => {
-    const matchesSearch =
-      service.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      service.description.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesCategory = 
-      categoryFilter === "all" || service.category === categoryFilter;
-    
-    return matchesSearch && matchesCategory;
-  });
+  // Filter services based on search term
+  const filteredServices = useMemo(() => {
+    if (!allServices) return [];
+    return allServices.filter((service) => {
+      const matchesSearch =
+        service.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        service.description.toLowerCase().includes(searchTerm.toLowerCase());
+      // Category filter logic removed
+      return matchesSearch;
+    });
+  }, [allServices, searchTerm]);
 
   // Sort services
-  const sortedServices = [...filteredServices].sort((a, b) => {
-    if (sortBy === "price-asc") return a.price - b.price;
-    if (sortBy === "price-desc") return b.price - a.price;
-    if (sortBy === "latest") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    return 0;
-  });
+  const sortedServices = useMemo(() => {
+    return [...filteredServices].sort((a, b) => {
+      // Price sort options removed as price is not in ServiceOffer model
+      if (sortBy === "latest") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      // Add other sorting relevant to ServiceOffer if needed, e.g., by title
+      if (sortBy === "title-asc") return a.title.localeCompare(b.title);
+      if (sortBy === "title-desc") return b.title.localeCompare(a.title);
+      return 0;
+    });
+  }, [filteredServices, sortBy]);
 
-  // Get unique categories for the filter
-  const categories = Array.from(new Set(serviceOffers.map(service => service.category)));
+  // Categories array removed as category field is not available
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -88,20 +92,7 @@ const ServicesPage = () => {
       </div>
 
       <div>
-        <Label htmlFor="category-filter" className="sr-only">Filter by Category</Label>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger id="category-filter">
-            <SelectValue placeholder="All Categories" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            {categories.map((category) => (
-              <SelectItem key={category} value={category} className="capitalize">
-                {category}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Category Select Removed */}
       </div>
 
       <div>
@@ -112,8 +103,9 @@ const ServicesPage = () => {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="latest">Latest</SelectItem>
-            <SelectItem value="price-asc">Price (Low to High)</SelectItem>
-            <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+            {/* Price sort options removed */}
+            <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+            <SelectItem value="title-desc">Title (Z-A)</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -147,22 +139,7 @@ const ServicesPage = () => {
             </SheetDescription>
           </SheetHeader>
           <div className="space-y-6 py-6">
-            <div className="space-y-2">
-              <Label htmlFor="mobile-category">Category</Label>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger id="mobile-category">
-                  <SelectValue placeholder="All Categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category} className="capitalize">
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Mobile Category Filter Removed */}
             
             <div className="space-y-2">
               <Label htmlFor="mobile-sort">Sort By</Label>
@@ -172,8 +149,9 @@ const ServicesPage = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="latest">Latest</SelectItem>
-                  <SelectItem value="price-asc">Price (Low to High)</SelectItem>
-                  <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                  {/* Price sort options removed */}
+                  <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                  <SelectItem value="title-desc">Title (Z-A)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -197,7 +175,17 @@ const ServicesPage = () => {
         </motion.div>
 
         <AnimatePresence mode="wait">
-          {sortedServices.length > 0 ? (
+          {isLoading && (
+            <motion.div key="loading" className="text-center p-8">
+              <p>Loading services...</p> {/* Replace with spinner/skeleton */}
+            </motion.div>
+          )}
+          {isError && (
+            <motion.div key="error" className="text-center p-8 text-red-500">
+              <p>Error fetching services: {error?.message}</p>
+            </motion.div>
+          )}
+          {!isLoading && !isError && sortedServices.length > 0 && (
             <motion.div 
               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
               variants={containerVariants}
@@ -211,7 +199,8 @@ const ServicesPage = () => {
                 </motion.div>
               ))}
             </motion.div>
-          ) : (
+          )}
+          {!isLoading && !isError && sortedServices.length === 0 && (
             <motion.div 
               className="p-8 text-center"
               initial={{ opacity: 0 }}
@@ -228,7 +217,7 @@ const ServicesPage = () => {
                 className="mt-4"
                 onClick={() => {
                   setSearchTerm("");
-                  setCategoryFilter("all");
+                  // setCategoryFilter("all"); // Category filter removed
                   setSortBy("latest");
                 }}
               >

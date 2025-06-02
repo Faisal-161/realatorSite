@@ -1,6 +1,9 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from core.models.listings import PropertyListing
+from backend.api.serializers.listings_serializer import PropertyListingSerializer
 
-class ListingsView(APIView):
-    def get(self, request):
-        return Response({"message": "Listings API is working."})
+class PropertyListingViewSet(viewsets.ModelViewSet):
+    queryset = PropertyListing.objects.all()
+    serializer_class = PropertyListingSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]

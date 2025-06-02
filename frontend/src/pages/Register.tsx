@@ -1,8 +1,9 @@
 
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react"; // For loading spinner
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,15 +12,28 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { UserRole } from "@/lib/types";
 
 const Register = () => {
-  const { register } = useAuth();
-  const [name, setName] = useState("");
+  const { register, authLoading } = useAuth();
+  const navigate = useNavigate();
+  const [username, setUsername] = useState(""); // Changed name to username
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("buyer");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    register(name, email, password, role);
+    setIsSubmitting(true);
+    try {
+      // Map frontend role 'partner' to backend 'service_provider'
+      const backendRole = role === 'partner' ? 'service_provider' : role;
+      await register(username, email, password, backendRole as UserRole);
+      // Navigation to login is handled by AuthContext's register method on success
+    } catch (error) {
+      // Error toast is handled by AuthContext
+      console.error("Register page caught error:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -41,12 +55,12 @@ const Register = () => {
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="username">Username</Label> {/* Changed label and htmlFor */}
                 <Input
-                  id="name"
-                  placeholder="John Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  id="username" // Changed id
+                  placeholder="yourusername" // Changed placeholder
+                  value={username} // Changed value
+                  onChange={(e) => setUsername(e.target.value)} // Changed handler
                   required
                 />
               </div>
@@ -136,7 +150,8 @@ const Register = () => {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">
-              <Button type="submit" className="w-full">
+              <Button type="submit" className="w-full" disabled={isSubmitting || authLoading}>
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Create account
               </Button>
               <div className="text-center text-sm">

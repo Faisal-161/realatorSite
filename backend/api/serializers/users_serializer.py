@@ -1,7 +1,7 @@
 from rest_framework import serializers
-from users.models import CustomUser
+from core.models.users import User # Updated import path and model name
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
-        model = CustomUser
-        fields = '__all__'
+        model = User # Updated model name
+        fields = ['id', 'username', 'email', 'role']

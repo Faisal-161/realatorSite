@@ -1,21 +1,34 @@
 
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom"; // useNavigate might be used if login itself doesn't redirect
 import { useAuth } from "@/lib/AuthContext";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react"; // For loading spinner
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building } from "lucide-react";
 
 const Login = () => {
-  const { login } = useAuth();
+  const { login, authLoading } = useAuth(); // authLoading from context might be useful for initial page load state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // const navigate = useNavigate(); // If navigation needs to be handled here
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(email, password);
+    setIsSubmitting(true);
+    try {
+      await login(email, password);
+      // Navigation is handled by AuthContext's login method on success
+    } catch (error) {
+      // Error toast is handled by AuthContext's login method
+      // If specific form error display is needed, handle it here
+      console.error("Login page caught error:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Demo account information
@@ -94,7 +107,8 @@ const Login = () => {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">
-              <Button type="submit" className="w-full">
+              <Button type="submit" className="w-full" disabled={isSubmitting || authLoading}>
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Log in
               </Button>
               <div className="text-center text-sm">
