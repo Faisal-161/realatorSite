@@ -1,7 +1,7 @@
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from core.models.bookings import Booking
-from backend.api.serializers.bookings_serializer import BookingSerializer
+from ..serializers.bookings_serializer import BookingSerializer
 
 class BookingViewSet(viewsets.ModelViewSet):
     queryset = Booking.objects.all()

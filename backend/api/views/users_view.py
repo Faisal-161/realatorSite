@@ -4,7 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from core.models.users import User # Correct path to the User model
-from backend.api.serializers.users_serializer import UserSerializer
+from ..serializers.users_serializer import UserSerializer  # Correct path to the UserSerializer
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()

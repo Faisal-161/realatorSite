@@ -1,7 +1,7 @@
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from core.models.services import ServiceOffer
-from backend.api.serializers.services_serializer import ServiceOfferSerializer
+from ..serializers.services_serializer import ServiceOfferSerializer
 
 class ServiceOfferViewSet(viewsets.ModelViewSet):
     queryset = ServiceOffer.objects.all()

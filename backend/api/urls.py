@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views.listings_view import PropertyListingViewSet
 from .views.bookings_view import BookingViewSet
 from .views.services_view import ServiceOfferViewSet
-from .views.user_view import UserViewSet
+from .views.users_view import UserViewSet
 
 # Create a router and register our viewsets with it.
 router = DefaultRouter()
