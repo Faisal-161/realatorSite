@@ -17,6 +17,6 @@ class ServiceOfferViewSet(viewsets.ModelViewSet):
     #     return ServiceOffer.objects.filter(service_provider=user) # Or other logic
 
     # TODO: Add logic for setting service_provider if not part of request data
-    # def perform_create(self, serializer):
-    #     # Example: serializer.save(service_provider=self.request.user)
-    #     serializer.save()
+    def perform_create(self, serializer):
+        # Example: serializer.save(service_provider=self.request.user)
+        serializer.save(service_provider=self.request.user)

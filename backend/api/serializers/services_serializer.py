@@ -3,9 +3,14 @@ from core.models.services import ServiceOffer # Updated import path
 from .users_serializer import UserSerializer
 from .listings_serializer import PropertyListingSerializer
 
+from core.models.listings import PropertyListing # Import PropertyListing
+
 class ServiceOfferSerializer(serializers.ModelSerializer):
     service_provider = UserSerializer(read_only=True) # Changed from provider
-    property = PropertyListingSerializer(read_only=True) # Changed from property_listing
+    # property = PropertyListingSerializer(read_only=True) # Changed from property_listing
+    # Make property writable by its ID
+    property = serializers.PrimaryKeyRelatedField(queryset=PropertyListing.objects.all())
+
 
     class Meta:
         model = ServiceOffer
