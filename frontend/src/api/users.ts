@@ -7,7 +7,7 @@ import type { User } from '../lib/types';
 export interface UserUpdateData {
   username?: string;
   email?: string;
-  role?: string; // Role updates might be restricted to admins on backend
+  // role?: string; // Role is read-only in UserSerializer, not updatable by users or via this standard route
   // Password updates are usually handled by separate endpoints/logic
 }
 
@@ -15,12 +15,12 @@ export interface UserUpdateData {
 // Djoser or similar libraries often handle registration flows.
 // Our basic UserViewSet will take these fields.
 export interface UserCreateData {
-  username: string;
+  username:string;
   email: string;
   password_confirm?: string; // if using password confirmation
   password_old?: string; // if changing password
   password?: string; // Required for creation
-  role?: string; // Role might be set by default or by admin only
+  // role?: string; // Role is read-only in UserSerializer, set by backend or admin only
 }
 
 

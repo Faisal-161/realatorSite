@@ -20,7 +20,7 @@ export interface RegisterData {
   password_confirm?: string; // if using password confirmation
   password_old?: string; // if changing password
   password?: string;
-  role: UserRole; // Or this might be set by default/admin
+  // role: UserRole; // Role is now read-only in the UserSerializer, set by backend or admin
 }
 
 // Assumes backend uses Simple JWT at /api/token/ for login
